@@ -1,7 +1,7 @@
 {
   "name": "amazon-scraper-api-sdk",
   "publishConfig": { "access": "public" },
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Official Node.js SDK for Amazon Scraper API (https://amazonscraperapi.com)",
   "keywords": ["amazon", "scraper", "api", "product-data", "asin", "web-scraping"],
   "license": "MIT",
