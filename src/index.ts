@@ -1,5 +1,5 @@
 /**
- * amazon-scraper-api-sdk — Node.js / TypeScript client for
+ * amazon-scraper-api-sdk - Node.js / TypeScript client for
  * https://amazonscraperapi.com
  *
  * Zero-config usage:
@@ -100,17 +100,17 @@ export class AmazonScraperAPI {
     return this.request('GET', '/api/v1/amazon/search', params as unknown as Record<string, unknown>);
   }
 
-  /** POST /v1/amazon/batch — create an async batch. */
+  /** POST /v1/amazon/batch - create an async batch. */
   async createBatch(params: BatchCreateParams): Promise<BatchCreateResponse> {
     return this.request('POST', '/api/v1/amazon/batch', undefined, params);
   }
 
-  /** GET /v1/amazon/batch/:id — fetch current batch status. */
+  /** GET /v1/amazon/batch/:id - fetch current batch status. */
   async getBatch(id: string): Promise<BatchStatusResponse> {
     return this.request('GET', `/api/v1/amazon/batch/${encodeURIComponent(id)}`);
   }
 
-  /** GET /v1/amazon/batch — list your recent batches. */
+  /** GET /v1/amazon/batch - list your recent batches. */
   async listBatches(limit = 20): Promise<{ batches: any[] }> {
     return this.request('GET', '/api/v1/amazon/batch', { limit });
   }
