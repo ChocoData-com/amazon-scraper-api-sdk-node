@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/amazon-scraper-api-sdk)](https://www.npmjs.com/package/amazon-scraper-api-sdk)
 [![license](https://img.shields.io/npm/l/amazon-scraper-api-sdk)](./LICENSE)
 
-Official Node.js / TypeScript SDK for **[Amazon Scraper API](https://www.amazonscraperapi.com/)**. Flat-priced at $0.50 per 1,000 successful requests, no credits, pay only for 2xx responses. Drop into any Node.js project to fetch structured Amazon product data, run keyword searches, or queue async batches with webhook callbacks.
+Official Node.js / TypeScript SDK for **[Amazon Scraper API](https://www.amazonscraperapi.com/)**. Pay only for successful (2xx) responses — non-2xx never cost you anything. Pricing starts at $0.90 per 1,000 requests on pay-as-you-go, drops to a flat **$0.50 per 1,000 requests** on Custom plans. 1,000 free requests on signup, no card. Drop into any Node.js project to fetch structured Amazon product data, run keyword searches, or queue async batches with webhook callbacks.
 
 ## Benchmark (live production, 2026-04)
 
@@ -170,7 +170,7 @@ try {
 | 503 | `SERVICE_OVERLOADED` | Global circuit breaker tripped | Honor `Retry-After: 60`. Rare; alerts us automatically |
 | 500 | `INTERNAL_ERROR` | Our bug | Report with `X-Request-Id` |
 
-**Flat-credit promise:** all non-2xx responses are free. `X-Request-Id` header is returned on every response. Paste it in any support ticket and we'll trace the request in under a minute.
+**Flat-credit promise:** all non-2xx responses are free. A basic request costs 5 credits (billing unit; end-customer price is $0.90 per 1,000 basic requests PAYG). Future JS-rendered calls will cost 15 credits. `X-Request-Id` header is returned on every response — paste it in any support ticket and we'll trace the request in under a minute.
 
 ## API reference (typed)
 
