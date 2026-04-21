@@ -4,19 +4,21 @@
 [![npm downloads](https://img.shields.io/npm/dm/amazon-scraper-api-sdk)](https://www.npmjs.com/package/amazon-scraper-api-sdk)
 [![license](https://img.shields.io/npm/l/amazon-scraper-api-sdk)](./LICENSE)
 
-Official Node.js / TypeScript SDK for **[Amazon Scraper API](https://amazonscraperapi.com)** — flat-priced ($0.50 per 1,000 successful requests), no credits, pay only for 2xx responses.
+Official Node.js / TypeScript SDK for **[Amazon Scraper API](https://www.amazonscraperapi.com/)**. Flat-priced at $0.50 per 1,000 successful requests, no credits, pay only for 2xx responses. Drop into any Node.js project to fetch structured Amazon product data, run keyword searches, or queue async batches with webhook callbacks.
 
 ## Benchmark (live production, 2026-04)
 
-| Metric | Ours | ScrapingBee $49 tier | ScraperAPI $49 tier |
-|---|---|---|---|
-| Median latency (product, US) | **~2.6 s** | ~3.3 s | n/a |
-| P95 latency | **~6 s** | ~22 s | n/a |
-| Price / 1,000 Amazon products | **$0.50** | $1.63 | $12.25 |
-| Concurrent threads (entry paid) | **50** | 10 | 20 |
-| Billing unit | flat per success | monthly credits | monthly credits |
+Measured on our own infrastructure against a 30-query mixed international set:
 
-Tested against the same 30-query mixed international set. Ours and ScrapingBee tied on success rate (70%); ours was **3–4× faster at P95**. Full benchmark notes in the [monorepo](https://github.com/ChocoData-com/amazon-scraper-api-sdk-node/tree/main/docs).
+| Metric | Value |
+|---|---|
+| Median latency (product, US) | **~2.6 s** |
+| P95 latency | **~6 s** |
+| P99 latency | ~10.5 s |
+| Price / 1,000 Amazon products | **$0.50** flat |
+| Concurrent threads (entry paid plan) | **50** |
+| Marketplaces supported | **20+** |
+| Billing unit | per successful (2xx) response |
 
 ---
 
@@ -26,9 +28,9 @@ Tested against the same 30-query mixed international set. Ours and ScrapingBee t
 npm install amazon-scraper-api-sdk
 ```
 
-Requires Node ≥ 18. ESM + CJS supported, TypeScript types included.
+Requires Node >= 18. ESM + CJS supported, TypeScript types included.
 
-## Quick start — single product
+## Quick start - single product
 
 ```typescript
 import { AmazonScraperAPI } from 'amazon-scraper-api-sdk';
@@ -38,11 +40,11 @@ const asa = new AmazonScraperAPI(process.env.ASA_API_KEY!);
 const product = await asa.product({ query: 'B09HN3Q81F', domain: 'com' });
 
 console.log(product.title);
-// → "Apple AirPods Pro (2nd Generation)..."
+// "Apple AirPods Pro (2nd Generation)..."
 console.log(product.price);
-// → { current: 199.00, currency: 'USD', was: 249.00 }
+// { current: 199.00, currency: 'USD', was: 249.00 }
 console.log(product.rating.average, product.rating.count);
-// → 4.7 58214
+// 4.7 58214
 ```
 
 ### Example output (trimmed)
@@ -53,14 +55,14 @@ console.log(product.rating.average, product.rating.count);
   "title": "Apple AirPods Pro (2nd Generation)...",
   "brand": "Apple",
   "price": { "current": 199.00, "currency": "USD", "was": 249.00, "savings_pct": 20 },
-  "rating": { "average": 4.7, "count": 58214, "distribution": {"5":0.81,"4":0.12,...} },
+  "rating": { "average": 4.7, "count": 58214, "distribution": {"5":0.81,"4":0.12} },
   "availability": "In Stock",
   "buybox": { "seller": "Amazon.com", "ships_from": "Amazon.com", "prime": true },
-  "images": ["https://m.media-amazon.com/images/I/...jpg", ...],
+  "images": ["https://m.media-amazon.com/images/I/...jpg"],
   "bullets": ["Active Noise Cancellation...", "Adaptive Audio..."],
   "variants": [{ "asin": "B0BDHB9Y8H", "name": "USB-C", "price": 249.00 }],
   "categories": ["Electronics", "Headphones", "Earbud Headphones"],
-  "specifications": { "Brand": "Apple", "Model Name": "AirPods Pro 2", ... },
+  "specifications": { "Brand": "Apple", "Model Name": "AirPods Pro 2" },
   "_meta": { "tier": "direct", "duration_ms": 2634, "marketplace": "amazon.com" }
 }
 ```
@@ -94,7 +96,7 @@ const batch = await asa.createBatch({
 });
 
 console.log('batch id:', batch.id);
-// SAVE THIS — the webhook signing secret is returned only once:
+// SAVE THIS. The webhook signing secret is returned only once:
 console.log('webhook secret:', batch.webhook_signature_secret);
 
 // Alternatively poll:
@@ -104,38 +106,38 @@ console.log(`${status.processed_count}/${status.total_count} processed`);
 
 ## Verifying webhook signatures
 
-Every webhook POST carries `X-ASA-Signature: sha256=<hmac-hex>` over the raw body — same pattern as Stripe / GitHub:
+Every webhook POST carries `X-ASA-Signature: sha256=<hmac-hex>` over the raw body (same pattern as Stripe / GitHub):
 
 ```typescript
 import { verifyWebhookSignature } from 'amazon-scraper-api-sdk';
 
-// Express / Fastify / Hono — read the RAW body, not the parsed JSON
+// Express / Fastify / Hono. Read the RAW body, not the parsed JSON.
 app.post('/webhooks/asa', async (req, res) => {
   const signature = req.header('X-ASA-Signature');
-  const rawBody = req.rawBody; // or however your framework exposes it
+  const rawBody = req.rawBody;
   const valid = await verifyWebhookSignature(signature, rawBody, process.env.WEBHOOK_SECRET!);
   if (!valid) return res.status(401).send('invalid signature');
-  // process req.body safely
   const { id, status, results } = req.body;
+  // process results safely
 });
 ```
 
 ## What the API solves for you
 
-Writing a maintainable Amazon scraper in-house is a **2–4 week engineer sprint** plus permanent 10–20% maintenance overhead. This SDK wraps a production service that has already solved:
+Building a production-grade Amazon scraper in-house is a 2-4 week engineering sprint plus permanent 10-20% maintenance overhead. This SDK wraps [Amazon Scraper API](https://www.amazonscraperapi.com/), which has already solved:
 
 | Pain point | What we handle |
 |---|---|
-| **Amazon CAPTCHAs / robot pages** | Auto-detected, retried through a heavier proxy tier (DC → residential → premium). You never see them. |
-| **Brittle CSS selectors** | Extractor library updates weekly as Amazon changes layouts. Your code doesn't care. |
-| **20+ marketplaces** | `amazon.de`, `.co.uk`, `.co.jp`, `.com.br`, ... with marketplace-specific parsing quirks (language, currency, layout). Pass `domain: 'de'` — done. |
-| **Country-matched residential IPs** | For non-US targets we auto-route through IPs in that country (e.g. `amazon.de` → German residential). One flag: `country: 'DE'`. |
+| **Amazon CAPTCHAs / robot pages** | Auto-detected, retried through a heavier proxy tier (datacenter, residential, premium). You never see them. |
+| **Brittle CSS selectors** | Extractor library updates as Amazon changes layouts. Your code doesn't care. |
+| **20+ marketplaces** | `amazon.de`, `.co.uk`, `.co.jp`, `.com.br`, and more. Marketplace-specific parsing (language, currency, layout) handled. Pass `domain: 'de'`, done. |
+| **Country-matched residential IPs** | For non-US targets we auto-route through IPs in that country (`amazon.de` uses German residential). Override with `country: 'DE'`. |
 | **Rotating proxies + anti-fingerprinting** | TLS fingerprints, headers, cookie handling. You never configure a proxy. |
 | **Rate-limit retries with exponential backoff** | Transparent. Your client only sees final results. |
-| **Structured JSON output** | Title, price, rating, reviews, variants, seller, images, categories — all parsed, typed. No `BeautifulSoup` selectors. |
+| **Structured JSON output** | Title, price, rating, reviews, variants, seller, images, categories. All parsed, typed. No `BeautifulSoup` selectors. |
 | **Batch/async jobs** | Submit 1,000 ASINs, get a webhook when done. |
 
-**Time saved:** a greenfield Node.js Amazon scraper built to this feature set takes ~80 engineer-hours. This SDK is 10 minutes.
+**Time saved:** a greenfield Node.js Amazon scraper built to this feature set takes roughly 80 engineer-hours. This SDK is 10 minutes.
 
 ## Error handling
 
@@ -157,18 +159,18 @@ try {
 
 | HTTP | `code` | When you see it | Recommended client action |
 |---|---|---|---|
-| 400 | `INVALID_PARAMS` | Missing `query`, unsupported `domain`, invalid `sort_by` | Fix request, don't retry. |
-| 401 | `INVALID_API_KEY` | Missing, malformed, or revoked key | Verify `ASA_API_KEY` env; rotate if leaked. |
-| 402 | `INSUFFICIENT_CREDITS` | Credit balance empty | Top up; balance refreshed on renewal. |
-| 429 | `RATE_LIMITED` | Over request-rate budget (120 req/60s authed) | Honor `Retry-After` header, then retry. |
-| 429 | `CONCURRENCY_LIMIT` | Over plan's parallel-thread cap | Drop parallelism or upgrade plan. Headers `X-Concurrency-Limit` + `X-Concurrency-Remaining` guide backoff. |
-| 502 | `target_unreachable` | Amazon down / all proxy tiers blocked | Retry after 30s. We already retried through 3 tiers before returning. |
-| 502 | `amazon-robot-or-human` | Amazon CAPTCHA gate not resolvable | Retry; often transient. You're not charged. |
-| 502 | `extraction_failed` | Amazon returned a page we can't parse (usually a challenge or a new layout) | Report with `X-Request-Id`; no charge. |
-| 503 | `SERVICE_OVERLOADED` | Global circuit breaker tripped | Honor `Retry-After: 60`. Rare; alerts us automatically. |
-| 500 | `INTERNAL_ERROR` | Our bug | Report with `X-Request-Id`. |
+| 400 | `INVALID_PARAMS` | Missing `query`, unsupported `domain`, invalid `sort_by` | Fix request, don't retry |
+| 401 | `INVALID_API_KEY` | Missing, malformed, or revoked key | Verify `ASA_API_KEY` env; rotate if leaked |
+| 402 | `INSUFFICIENT_CREDITS` | Credit balance empty | Top up; balance refreshed on renewal |
+| 429 | `RATE_LIMITED` | Over request-rate budget (120 req/60s authed) | Honor `Retry-After` header, then retry |
+| 429 | `CONCURRENCY_LIMIT` | Over plan's parallel-thread cap | Drop parallelism or upgrade plan. `X-Concurrency-Limit` + `X-Concurrency-Remaining` headers guide backoff |
+| 502 | `target_unreachable` | Amazon down / all proxy tiers blocked | Retry after 30s. We already retried through 3 tiers before returning |
+| 502 | `amazon-robot-or-human` | Amazon CAPTCHA gate not resolvable | Retry; often transient. You're not charged |
+| 502 | `extraction_failed` | Amazon returned a page we can't parse | Report with `X-Request-Id`; no charge |
+| 503 | `SERVICE_OVERLOADED` | Global circuit breaker tripped | Honor `Retry-After: 60`. Rare; alerts us automatically |
+| 500 | `INTERNAL_ERROR` | Our bug | Report with `X-Request-Id` |
 
-**Flat-credit promise:** all non-2xx responses are free. `X-Request-Id` header is returned on every response — paste it in any support ticket and we'll trace the request in under a minute.
+**Flat-credit promise:** all non-2xx responses are free. `X-Request-Id` header is returned on every response. Paste it in any support ticket and we'll trace the request in under a minute.
 
 ## API reference (typed)
 
@@ -178,8 +180,8 @@ class AmazonScraperAPI {
 
   product(params: {
     query: string;                            // ASIN or Amazon URL
-    domain?: 'com' | 'co.uk' | 'de' | ... ;   // 20 marketplaces
-    language?: string;                        // e.g. 'en_US', 'de_DE'
+    domain?: 'com' | 'co.uk' | 'de' | string; // 20 marketplaces
+    language?: string;                        // 'en_US', 'de_DE', etc.
     add_html?: boolean;                       // include raw HTML in response
     country?: string;                         // residential IP country (ISO-2)
   }): Promise<AmazonProduct>;
@@ -204,14 +206,15 @@ class AmazonScraperAPI {
 
 ## Get an API key
 
-[app.amazonscraperapi.com](https://app.amazonscraperapi.com) — **1,000 free requests on signup, no credit card required.**
+[app.amazonscraperapi.com](https://app.amazonscraperapi.com). **1,000 free requests on signup, no credit card required.**
 
 ## Links
 
+- **Website:** https://www.amazonscraperapi.com/
 - **Docs:** https://amazonscraperapi.com/docs
 - **Status:** https://amazonscraperapi.com/status
 - **Pricing:** https://amazonscraperapi.com/pricing
-- **Support:** [support@amazonscraperapi.com](mailto:support@amazonscraperapi.com) — quote the `X-Request-Id` header for fastest debugging
+- **Support:** [support@amazonscraperapi.com](mailto:support@amazonscraperapi.com) (quote the `X-Request-Id` header for fastest debugging)
 - **Python SDK:** [amazonscraperapi-sdk](https://pypi.org/project/amazonscraperapi-sdk/) · **Go SDK:** [github.com/ChocoData-com/amazon-scraper-api-sdk-go](https://github.com/ChocoData-com/amazon-scraper-api-sdk-go) · **CLI:** [amazon-scraper-api-cli](https://www.npmjs.com/package/amazon-scraper-api-cli) · **MCP server:** [amazon-scraper-api-mcp](https://www.npmjs.com/package/amazon-scraper-api-mcp)
 
 ## License
