@@ -122,6 +122,8 @@ export class AmazonScraperAPI {
     jsonBody?: unknown
   ): Promise<any> {
     const url = new URL(this.baseUrl + path);
+    // Auth travels in the query string (?api_key=) - the documented approach.
+    url.searchParams.set('api_key', this.apiKey);
     if (queryParams) {
       for (const [k, v] of Object.entries(queryParams)) {
         if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
@@ -133,7 +135,6 @@ export class AmazonScraperAPI {
       const res = await this.fetchImpl(url.toString(), {
         method,
         headers: {
-          Authorization: `Bearer ${this.apiKey}`,
           'User-Agent': 'amazon-scraper-api-sdk-node/0.1.0',
           ...(jsonBody ? { 'Content-Type': 'application/json' } : {}),
         },
