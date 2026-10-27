@@ -77,7 +77,7 @@ const results = await asa.search({
   query: 'wireless headphones',
   domain: 'co.uk',
   sort_by: 'avg_customer_review',
-  pages: 1,
+  start_page: 1, // one page per call; increment to paginate
 });
 
 for (const p of results.products) {
@@ -200,8 +200,8 @@ class AmazonScraperAPI {
     query: string;
     domain?: AmazonDomain;
     sort_by?: 'best_match' | 'price_asc' | 'price_desc' | 'avg_customer_review' | 'newest';
-    start_page?: number;
-    pages?: number;
+    start_page?: number;                      // 1-based; one page per call
+    pages?: number;                           // accepted but currently ignored
   }): Promise<any>;                           // { page, products: [...] }
 
   createBatch(params: {

@@ -21,7 +21,9 @@ export interface AmazonSearchParams {
   query: string;
   domain?: AmazonDomain;
   sort_by?: 'best_match' | 'price_asc' | 'price_desc' | 'avg_customer_review' | 'newest';
+  /** Results page to fetch (1-based). Use this to paginate. */
   start_page?: number;
+  /** Accepted by the API but currently ignored: each call returns one page. Paginate with `start_page`. */
   pages?: number;
 }
 
