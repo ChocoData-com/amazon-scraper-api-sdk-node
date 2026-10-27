@@ -28,7 +28,7 @@ Measured on our own infrastructure against a 30-query mixed international set:
 npm install amazon-scraper-api-sdk
 ```
 
-Requires Node >= 18. ESM + CJS supported, TypeScript types included.
+Requires Node >= 18. ESM package (from CommonJS, use `await import('amazon-scraper-api-sdk')`). TypeScript types included.
 
 ## Quick start - single product
 
@@ -40,30 +40,33 @@ const asa = new AmazonScraperAPI(process.env.ASA_API_KEY!);
 const product = await asa.product({ query: 'B09HN3Q81F', domain: 'com' });
 
 console.log(product.title);
-// "Apple AirPods Pro (2nd Generation)..."
-console.log(product.price);
-// { current: 199.00, currency: 'USD', was: 249.00 }
-console.log(product.rating.average, product.rating.count);
-// 4.7 58214
+// "LEGEND COOKWARE 5-Ply Stainless Steel Cookware Set, 14-Piece..."
+console.log(product.price, product.currency);
+// 549.99 USD
+console.log(product.rating, product.reviews_count);
+// 4.5 865
 ```
 
-### Example output (trimmed)
+### Example output (trimmed, ~55 fields in total)
 
 ```json
 {
   "asin": "B09HN3Q81F",
-  "title": "Apple AirPods Pro (2nd Generation)...",
-  "brand": "Apple",
-  "price": { "current": 199.00, "currency": "USD", "was": 249.00, "savings_pct": 20 },
-  "rating": { "average": 4.7, "count": 58214, "distribution": {"5":0.81,"4":0.12} },
-  "availability": "In Stock",
-  "buybox": { "seller": "Amazon.com", "ships_from": "Amazon.com", "prime": true },
-  "images": ["https://m.media-amazon.com/images/I/...jpg"],
-  "bullets": ["Active Noise Cancellation...", "Adaptive Audio..."],
-  "variants": [{ "asin": "B0BDHB9Y8H", "name": "USB-C", "price": 249.00 }],
-  "categories": ["Electronics", "Headphones", "Earbud Headphones"],
-  "specifications": { "Brand": "Apple", "Model Name": "AirPods Pro 2" },
-  "_meta": { "tier": "direct", "duration_ms": 2634, "marketplace": "amazon.com" }
+  "title": "LEGEND COOKWARE 5-Ply Stainless Steel Cookware Set, 14-Piece...",
+  "brand": "LEGEND COOKWARE",
+  "price": 549.99,
+  "price_strikethrough": null,
+  "currency": "USD",
+  "rating": 4.5,
+  "reviews_count": 865,
+  "stock": "In Stock",
+  "is_prime": true,
+  "images": ["https://m.media-amazon.com/images/I/71Q3a8JH5NL._AC_SY355_.jpg", "..."],
+  "bullet_points": "5-PLY STAINLESS STEEL COOKWARE HEATS EVENLY - Five layers of steel...",
+  "sales_rank": [
+    { "ladder": [{ "name": "Kitchen & Dining", "url": null }], "rank": 36177 },
+    { "ladder": [{ "name": "Kitchen Cookware Sets", "url": null }], "rank": 174 }
+  ]
 }
 ```
 
@@ -77,8 +80,9 @@ const results = await asa.search({
   pages: 1,
 });
 
-for (const r of results.results) {
-  console.log(r.position, r.asin, r.title, r.price?.current);
+for (const p of results.products) {
+  // Sponsored cards have sponsored_position instead of organic_position.
+  console.log(p.organic_position, p.asin, p.title, p.price, p.rating, p.reviews_count);
 }
 ```
 
@@ -133,7 +137,6 @@ Building a production-grade Amazon scraper in-house is a 2-4 week engineering sp
 | **20+ marketplaces** | `amazon.de`, `.co.uk`, `.co.jp`, `.com.br`, and more. Marketplace-specific parsing (language, currency, layout) handled. Pass `domain: 'de'`, done. |
 | **Country-matched residential IPs** | For non-US targets we auto-route through IPs in that country (`amazon.de` uses German residential). Override with `country: 'DE'`. |
 | **Rotating proxies + anti-fingerprinting** | TLS fingerprints, headers, cookie handling. You never configure a proxy. |
-| **Rate-limit retries with exponential backoff** | Transparent. Your client only sees final results. |
 | **Structured JSON output** | Title, price, rating, reviews, variants, seller, images, categories. All parsed, typed. No `BeautifulSoup` selectors. |
 | **Batch/async jobs** | Submit 1,000 ASINs, get a webhook when done. |
 
@@ -141,16 +144,21 @@ Building a production-grade Amazon scraper in-house is a 2-4 week engineering sp
 
 ## Error handling
 
-Every non-2xx response follows a stable shape so you can `switch` on `error.code`:
+Every failed call throws an `AmazonScraperAPIError` with `status` (HTTP status), `code` (the API's error code, or `null`) and `body` (the parsed JSON body). The SDK does not retry on its own, so `switch` on `err.code` and decide:
 
 ```typescript
+import { AmazonScraperAPIError } from 'amazon-scraper-api-sdk';
+
 try {
-  await asa.product({ query: 'INVALID_ASIN', domain: 'com' });
+  await asa.product({ query: 'B09HN3Q81F', domain: 'com' });
 } catch (err) {
+  if (!(err instanceof AmazonScraperAPIError)) throw err;
   if (err.code === 'INSUFFICIENT_CREDITS') {
     // top up
   } else if (err.code === 'RATE_LIMITED') {
-    await sleep(err.retryAfterMs);
+    await sleep((err.body as any)?.error?.retry_after_ms ?? 1000);
+  } else if (err.code === 'target_unreachable') {
+    await sleep(60_000); // then retry once
   } else {
     throw err;
   }
@@ -159,16 +167,18 @@ try {
 
 | HTTP | `code` | When you see it | Recommended client action |
 |---|---|---|---|
-| 400 | `INVALID_PARAMS` | Missing `query`, unsupported `domain`, invalid `sort_by` | Fix request, don't retry |
+| 400 | `invalid_params` | Missing `query`, unsupported `domain`, invalid `sort_by` | Fix request, don't retry |
 | 401 | `INVALID_API_KEY` | Missing, malformed, or revoked key | Verify `ASA_API_KEY` env; rotate if leaked |
 | 402 | `INSUFFICIENT_CREDITS` | Credit balance empty | Top up; balance refreshed on renewal |
-| 429 | `RATE_LIMITED` | Over request-rate budget (120 req/60s authed) | Honor `Retry-After` header, then retry |
+| 404 | `product_not_found` | ASIN delisted, malformed, or not on this marketplace | Don't retry; drop the ASIN |
+| 429 | `RATE_LIMITED` | Over request-rate budget | Wait `error.retry_after_ms`, then retry |
 | 429 | `CONCURRENCY_LIMIT` | Over plan's parallel-thread cap | Drop parallelism or upgrade plan. `X-Concurrency-Limit` + `X-Concurrency-Remaining` headers guide backoff |
-| 502 | `target_unreachable` | Amazon down / all proxy tiers blocked | Retry after 30s. We already retried through 3 tiers before returning |
-| 502 | `amazon-robot-or-human` | Amazon CAPTCHA gate not resolvable | Retry; often transient. You're not charged |
-| 502 | `extraction_failed` | Amazon returned a page we can't parse | Report with `X-Request-Id`; no charge |
+| 502 | `target_unreachable` | Amazon blocked every internal retry (`last_block_reason` says why) | Retry after 60s or more. Not charged |
+| 502 | `extraction_failed` | Amazon returned a page we can't parse | Retry later; report with `X-Request-Id` if it persists. Not charged |
 | 503 | `SERVICE_OVERLOADED` | Global circuit breaker tripped | Honor `Retry-After: 60`. Rare; alerts us automatically |
 | 500 | `INTERNAL_ERROR` | Our bug | Report with `X-Request-Id` |
+
+The default request timeout is 120s (the API's own ceiling); override it with `new AmazonScraperAPI(key, { timeoutMs })`.
 
 **Flat-credit promise:** all non-2xx responses are free. A basic request costs 5 credits (billing unit; end-customer price is $0.90 per 1,000 basic requests PAYG). Future JS-rendered calls will cost 15 credits. `X-Request-Id` header is returned on every response — paste it in any support ticket and we'll trace the request in under a minute.
 
@@ -184,7 +194,7 @@ class AmazonScraperAPI {
     language?: string;                        // 'en_US', 'de_DE', etc.
     add_html?: boolean;                       // include raw HTML in response
     country?: string;                         // residential IP country (ISO-2)
-  }): Promise<AmazonProduct>;
+  }): Promise<any>;                           // product JSON, ~55 fields
 
   search(params: {
     query: string;
@@ -192,7 +202,7 @@ class AmazonScraperAPI {
     sort_by?: 'best_match' | 'price_asc' | 'price_desc' | 'avg_customer_review' | 'newest';
     start_page?: number;
     pages?: number;
-  }): Promise<AmazonSearchResult>;
+  }): Promise<any>;                           // { page, products: [...] }
 
   createBatch(params: {
     endpoint: 'amazon.product' | 'amazon.search';
@@ -212,9 +222,8 @@ class AmazonScraperAPI {
 
 - **Website:** https://www.amazonscraperapi.com/
 - **Docs:** https://amazonscraperapi.com/docs
-- **Status:** https://amazonscraperapi.com/status
 - **Pricing:** https://amazonscraperapi.com/pricing
-- **Support:** [support@amazonscraperapi.com](mailto:support@amazonscraperapi.com) (quote the `X-Request-Id` header for fastest debugging)
+- **Support:** [info@amazonscraperapi.com](mailto:info@amazonscraperapi.com) (quote the `X-Request-Id` header for fastest debugging)
 - **Python SDK:** [amazonscraperapi-sdk](https://pypi.org/project/amazonscraperapi-sdk/) · **Go SDK:** [github.com/ChocoData-com/amazon-scraper-api-sdk-go](https://github.com/ChocoData-com/amazon-scraper-api-sdk-go) · **CLI:** [amazon-scraper-api-cli](https://www.npmjs.com/package/amazon-scraper-api-cli) · **MCP server:** [amazon-scraper-api-mcp](https://www.npmjs.com/package/amazon-scraper-api-mcp)
 
 ## License

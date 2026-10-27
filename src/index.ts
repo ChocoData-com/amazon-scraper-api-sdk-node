@@ -13,6 +13,8 @@ export interface AmazonProductParams {
   domain?: AmazonDomain;
   language?: string;
   add_html?: boolean;
+  /** Residential exit country, ISO-2 uppercase (e.g. 'DE'). Defaults to the marketplace's country. */
+  country?: string;
 }
 
 export interface AmazonSearchParams {
@@ -65,13 +67,28 @@ export interface AmazonScraperAPIOptions {
   timeoutMs?: number;
 }
 
+/**
+ * The API returns two error shapes: `{ "error": "target_unreachable", ... }`
+ * for scrape outcomes and `{ "error": { "code": "INVALID_API_KEY", ... } }`
+ * for account and limit errors. Returns the code from either, or null.
+ */
+export function errorCode(body: unknown): string | null {
+  const e = (body as { error?: unknown } | null)?.error;
+  if (typeof e === 'string') return e;
+  if (e && typeof e === 'object' && typeof (e as { code?: unknown }).code === 'string') return (e as { code: string }).code;
+  return null;
+}
+
 export class AmazonScraperAPIError extends Error {
   readonly status: number;
   readonly body: unknown;
+  /** Error code from the response body, e.g. `target_unreachable` or `INSUFFICIENT_CREDITS`. */
+  readonly code: string | null;
   constructor(status: number, body: unknown, message: string) {
     super(message);
     this.status = status;
     this.body = body;
+    this.code = errorCode(body);
     this.name = 'AmazonScraperAPIError';
   }
 }
@@ -87,7 +104,8 @@ export class AmazonScraperAPI {
     this.apiKey = apiKey;
     this.baseUrl = (opts.baseUrl ?? 'https://api.amazonscraperapi.com').replace(/\/$/, '');
     this.fetchImpl = opts.fetchImpl ?? fetch;
-    this.timeoutMs = opts.timeoutMs ?? 60_000;
+    // 120s: the API's own ceiling. Slow but successful scrapes can take 70s+.
+    this.timeoutMs = opts.timeoutMs ?? 120_000;
   }
 
   /** GET /v1/amazon/product */
@@ -135,7 +153,7 @@ export class AmazonScraperAPI {
       const res = await this.fetchImpl(url.toString(), {
         method,
         headers: {
-          'User-Agent': 'amazon-scraper-api-sdk-node/0.1.0',
+          'User-Agent': 'amazon-scraper-api-sdk-node/0.1.6',
           ...(jsonBody ? { 'Content-Type': 'application/json' } : {}),
         },
         body: jsonBody ? JSON.stringify(jsonBody) : undefined,
@@ -143,7 +161,7 @@ export class AmazonScraperAPI {
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new AmazonScraperAPIError(res.status, body, `HTTP ${res.status}: ${body?.error ?? 'request failed'}`);
+        throw new AmazonScraperAPIError(res.status, body, `HTTP ${res.status}: ${errorCode(body) ?? 'request failed'}`);
       }
       return body;
     } finally {
